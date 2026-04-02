@@ -1,0 +1,44 @@
+sequenceDiagram
+    autonumber
+    participant User as 用户
+    participant GW as FastAPI Gateway
+    participant REC as SessionRecorder
+    participant PRX as LLM Proxy
+    participant INF as 推理服务(vLLM)
+    participant TS as TrajectoryStore
+    participant SCH as TrainingScheduler
+    participant ADP as RolloutPersistenceAdapter
+    participant BE as VerlBackend
+    participant LM as LoRAManager
+
+    rect rgb(220, 245, 220)
+    Note over User,INF: 阶段1: 请求处理 (同步路径)
+    User->>GW: HTTP POST /v1/chat/completions
+    Note over User,GW: Headers: X-User-ID, X-Session-ID
+    GW->>REC: record_request(user, session, prompt)
+    REC->>PRX: forward_request(prompt, lora=user_lora)
+    PRX->>INF: POST /v1/chat/completions + LoRA注入
+    INF-->>PRX: 流式响应 (SSE tokens)
+    PRX-->>REC: 流式 token 累积
+    REC-->>GW: 流式返回给用户
+    REC->>REC: session完成 → 构建 Trajectory
+    REC->>TS: save_trajectory(status=PENDING)
+    end
+
+    rect rgb(255, 243, 205)
+    Note over SCH,LM: 阶段2: 后台训练 (异步路径)
+    SCH->>TS: scan_pending(user_id)
+    TS-->>SCH: 待训练轨迹列表
+    SCH->>SCH: TriggerPolicy.evaluate()
+    alt 达到训练阈值
+        SCH->>TS: mark_training(trajectory_ids)
+        SCH->>ADP: convert_to_dataproto(trajectories)
+        ADP-->>SCH: DataProto (TensorDict)
+        SCH->>BE: train(data_proto)
+        BE->>BE: RayPPOTrainer.train_step()
+        BE-->>SCH: TrainingResult (weights, metrics)
+        SCH->>LM: publish(user_id, weights, metrics)
+        LM->>INF: POST /v1/load_lora_adapter
+        LM->>TS: mark_trained(trajectory_ids)
+    end
+    end

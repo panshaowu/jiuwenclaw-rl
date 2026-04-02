@@ -1,0 +1,26 @@
+flowchart TD
+    A["HTTP 请求/响应\n(OpenAI兼容格式)"] -->|"解析"| B["SessionRecorder\n(Turn列表: 用户+助手)"]
+    B -->|"累积"| C["Trajectory\n(完整会话轨迹)"]
+    C -->|"持久化"| D["TrajectoryStore\n(SQLite, 状态: PENDING)"]
+    D -->|"扫描待训练"| E["RolloutPersistenceAdapter\n(核心转换层)"]
+
+    subgraph "核心转换层 (Trajectory → DataProto)"
+        E -->|"Trajectory → Rollout"| F1["RolloutEncoder\n(复用agentrl)"]
+        F1 -->|"Rollout → RolloutWithReward"| F2["Token编码\n(prompt_ids, response_ids)"]
+        F2 -->|"RolloutWithReward → TensorDict"| F3["TensorDict构建\n(input_ids, responses, scores)"]
+    end
+
+    F3 -->|"DataProto"| G["VerlBackend\n(RayPPOTrainer.train_step)"]
+    G -->|"训练完成"| H["LoRA 权重\n(用户专属)"]
+    H -->|"热加载通知"| I["推理服务(vLLM)\n(/v1/load_lora_adapter)"]
+
+    classDef convert fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef storage fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef input fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    classDef output fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+
+    class A input
+    class B,C,D storage
+    class E,F1,F2,F3 convert
+    class G,H output
+    class I input

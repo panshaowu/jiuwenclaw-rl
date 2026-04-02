@@ -1,0 +1,62 @@
+graph TB
+    subgraph "core/rl_engine/ - RL引擎"
+        subgraph "公共基础层"
+            Config[config/ 配置Schema]
+            Runtime[runtime/ 轨迹收集Rail]
+            Trainer[trainer/ verl训练执行器]
+            Store[store/ 轨迹持久化]
+            Reward[reward/ 奖励注册]
+            Proxy[proxy/ LLM推理代理]
+            Monitor[monitoring/ 监控指标]
+        end
+
+        subgraph "online/ 在线RL"
+            Gateway[gateway/ FastAPI服务]
+            OnlineStore[store/ SQLite+DataProto转换]
+            Scheduler[scheduler/ 训练触发]
+            Backend[backend/ RL后端轻薄封装]
+            LoRATrainer[trainer/ LoRA训练器]
+        end
+    end
+
+    subgraph "dev_tools/rl_training/ - 离线RL工具"
+        Coordinator[coordinator/ 训练协调器]
+        Optimizer[optimizer/ RLOptimizer用户入口]
+    end
+
+    subgraph "外部依赖"
+        Verl[verl RayPPOTrainer]
+        vLLM[vLLM/SGLang 推理服务]
+    end
+
+    %% 公共基础层关系
+    Config --> Runtime
+    Config --> Trainer
+    Config --> Store
+    Reward --> Runtime
+    Proxy --> Runtime
+    Monitor --> Trainer
+    Monitor --> Runtime
+
+    %% 在线RL关系
+    Gateway --> OnlineStore
+    OnlineStore --> Scheduler
+    Scheduler --> Backend
+    Backend --> LoRATrainer
+    Backend --> Verl
+    LoRATrainer --> vLLM
+
+    %% 公共基础与在线RL关系
+    Runtime --> Gateway
+    Store --> OnlineStore
+    Trainer --> Backend
+    Reward --> Scheduler
+    Proxy --> Gateway
+
+    %% 离线RL关系
+    Coordinator --> Optimizer
+    Coordinator --> Runtime
+    Coordinator --> Store
+    Coordinator --> Trainer
+    Optimizer --> Coordinator
+    Optimizer --> Config

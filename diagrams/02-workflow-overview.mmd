@@ -1,0 +1,75 @@
+flowchart TB
+    subgraph "JiuwenClaw 应用层"
+        Channel[通信渠道\n飞书/钉钉/微信/Telegram]
+        Gateway_CLAW[JiuwenClaw Gateway\nAPI网关]
+        Memory[记忆系统\n上下文压缩]
+        Perms[权限系统\n工具审批]
+    end
+
+    subgraph "Agent-Core 核心运行时"
+        Agent[ReActAgent / WorkflowAgent\n智能体实例]
+        Runner[Runner\n执行引擎]
+        ContextEngine[ContextEngine\n上下文管理]
+        ToolSystem[Tool System\nMCP工具调用]
+
+        subgraph "rl_engine/ RL引擎"
+            RLGateway[Online RL Gateway\nFastAPI服务]
+            RLRecorder[SessionRecorder\n轨迹收集]
+            RLStore[TrajectoryStore\nSQLite存储]
+            RLScheduler[TrainingScheduler\n训练触发]
+            RLBackend[VerlBackend\nRL训练]
+            RLLoRA[LoRAManager\n权重管理]
+            RLCommon[公共基础\nconfig/runtime/trainer/store/reward/proxy/monitoring]
+        end
+    end
+
+    subgraph "dev_tools/ RL训练工具"
+        RLOptimizer[RLOptimizer\n离线训练入口]
+        RLCoordinator[TrainingCoordinator\nrollout协调]
+    end
+
+    subgraph "外部服务"
+        vLLM[vLLM/SGLang\n推理服务]
+        Verl[verl\nPPO/GRPO训练]
+    end
+
+    %% JiuwenClaw → Agent-Core
+    Channel --> Gateway_CLAW
+    Gateway_CLAW --> Agent
+    Gateway_CLAW -.在线RL模式.-> RLGateway
+    Memory --> Agent
+    Perms --> ToolSystem
+    Agent --> Runner
+    Agent --> ContextEngine
+    Agent --> ToolSystem
+
+    %% 在线RL流 (绿色)
+    RLGateway --> RLRecorder
+    RLRecorder --> RLStore
+    RLStore --> RLScheduler
+    RLScheduler --> RLBackend
+    RLBackend --> RLLoRA
+    RLLoRA -.热加载.-> vLLM
+    RLCommon -.支撑.-> RLGateway
+    RLCommon -.支撑.-> RLRecorder
+    RLCommon -.支撑.-> RLBackend
+
+    %% 离线RL流 (橙色)
+    RLOptimizer --> RLCoordinator
+    RLCoordinator --> RLCommon
+    RLCoordinator --> RLBackend
+
+    %% RL引擎 → 外部
+    RLBackend --> Verl
+
+    classDef online fill:#d4edda,stroke:#155724,stroke-width:2px
+    classDef offline fill:#fff3cd,stroke:#856404,stroke-width:2px
+    classDef common fill:#d1ecf1,stroke:#0c5460,stroke-width:2px
+    classDef app fill:#f8f9fa,stroke:#6c757d,stroke-width:1px
+    classDef external fill:#e2e3e5,stroke:#383d41,stroke-width:1px
+
+    class RLGateway,RLRecorder,RLStore,RLScheduler,RLBackend,RLLoRA online
+    class RLOptimizer,RLCoordinator offline
+    class RLCommon common
+    class Channel,Gateway_CLAW,Memory,Perms,Agent,Runner,ContextEngine,ToolSystem app
+    class vLLM,Verl external

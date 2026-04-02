@@ -1,0 +1,40 @@
+graph TB
+    subgraph "Gateway 层"
+        App[FastAPI App]
+        Recorder[SessionRecorder]
+        LLMProxy[LLM Proxy]
+    end
+
+    subgraph "存储层"
+        TStore[TrajectoryStore SQLite]
+        Adapter[RolloutPersistenceAdapter]
+    end
+
+    subgraph "调度层"
+        TSched[TrainingScheduler]
+        Trigger[TriggerPolicy]
+        RSched[ResourceScheduler]
+    end
+
+    subgraph "后端层"
+        RLBack[RLBackend 接口]
+        VBack[VerlBackend]
+    end
+
+    subgraph "训练层"
+        LoRAT[BatchUserLoRATrainer]
+        LoRAM[LoRAManager]
+    end
+
+    App --> Recorder
+    Recorder --> LLMProxy
+    Recorder --> TStore
+    TStore --> Adapter
+    Adapter --> TSched
+    TSched --> Trigger
+    Trigger --> RSched
+    RSched --> RLBack
+    RLBack --> VBack
+    VBack --> LoRAT
+    LoRAT --> LoRAM
+    LoRAM -.热加载通知.-> LLMProxy
